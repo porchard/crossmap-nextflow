@@ -96,6 +96,28 @@ process make_bed {
 
 }
 
+process make_snp_mappability {
+
+    time '24h'
+    publishDir "${params.results}/snp-mappability"
+    container 'library://porchard/default/general:20220107'
+    memory '50 GB'
+
+    input:
+    tuple val(k), path(kmer_mappability)
+
+    output:
+    path("snp_mappability_${k}mer_${MISMATCH}mismatch.bed.gz")
+    path("snp_mappability_${k}mer_${MISMATCH}mismatch.bed.gz.tbi")
+
+
+    """
+    kmer-mappability-to-snp-mappability.py --k $k $kmer_mappability | bgzip -c > snp_mappability_${k}mer_${MISMATCH}mismatch.bed.gz
+    tabix -p bed snp_mappability_${k}mer_${MISMATCH}mismatch.bed.gz
+    """
+
+}
+
 
 process make_bowtie_index {
 
@@ -278,6 +300,7 @@ workflow {
     bowtie_index = make_bowtie_index(full_fasta)
 
     kmer_mappability = make_k_mappability(full_fasta, KS) | make_bed // k, bed
+    make_snp_mappability(kmer_mappability)
     exon_kmer_mappability_fn = kmer_mappability.filter({it -> it[0] == EXON_K}).map({it -> it[1]})
     utr_kmer_mappability_fn = kmer_mappability.filter({it -> it[0] == UTR_K}).map({it -> it[1]})
 
