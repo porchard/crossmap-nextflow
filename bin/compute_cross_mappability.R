@@ -268,15 +268,12 @@ find_and_save_cross_mappability <- function(g, chromosomes, delete_alignment=F, 
     conflicting_genes <- align_dt[,get_chr_conflicts(kmer, pos, chr), by=chr]
     
     ### save conflicting gene pairs
-    out_subdir = get_subdir(gid = g, out_dir = out_dir, dir_name_len = dir_name_len)
-    out_fn <- paste0(out_subdir, '/', g, '.crossmap.txt')
+    out_fn <- paste0(g, '.crossmap.txt')
     
     if(append_conflict==FALSE && file.exists(out_fn))
       file.remove(out_fn)
     
     if(nrow(conflicting_genes) > 0 ){
-      if(!dir.exists(out_subdir))
-        dir.create(out_subdir)
       write.table(conflicting_genes[,c('G1','G2', 'S1')], file = out_fn, sep = '\t', quote = F, row.names = F, col.names = F, append = append_conflict)
     }
     

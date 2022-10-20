@@ -220,14 +220,10 @@ process preprocess_cross_mappability {
     output:
     tuple path(mappability_fn), path(exon_utr_annot_fn), path(ambiguous_kmer_dir), path(bowtie_index), path('ambiguous_kmers_alignment'), path('cross_mappability')
 
-
-    script:
-    n_gene_per_crossmap_batch = N_GENE_PER_CROSSMAP_BATCH
-
     """
     mkdir -p ambiguous_kmers_alignment
     mkdir -p cross_mappability
-    compute_cross_mappability.R --annot $exon_utr_annot_fn --mappability $mappability_fn --kmer $ambiguous_kmer_dir --align ambiguous_kmers_alignment --index genome --n1 1 --n2 $n_gene_per_crossmap_batch --mismatch $MISMATCH --max_chr $MAX_CHR --max_gene $MAX_GENE_ALIGNMENT --initonly TRUE --dir_name_len $DIR_NAME_LEN --verbose 1 -o cross_mappability 2>&1 | tee compute_cross_mappability_1_init.log
+    compute_cross_mappability.R --annot $exon_utr_annot_fn --mappability $mappability_fn --kmer $ambiguous_kmer_dir --align ambiguous_kmers_alignment --index genome --n1 1 --n2 $N_GENE_PER_CROSSMAP_BATCH --mismatch $MISMATCH --max_chr $MAX_CHR --max_gene $MAX_GENE_ALIGNMENT --initonly TRUE --dir_name_len $DIR_NAME_LEN --verbose 1 -o cross_mappability 2>&1 | tee compute_cross_mappability_1_init.log
     """
 
 }
@@ -237,21 +233,37 @@ process process_cross_mappability {
     container 'library://porchard/default/crossmap:20220311'
     memory '30 GB'
     tag "$n1"
-    publishDir "${params.results}/cross_mappability"
+    errorStrategy 'ignore'
 
     input:
     tuple path(mappability_fn), path(exon_utr_annot_fn), path(ambiguous_kmer_dir), path(bowtie_index), path(ambiguous_kmers_alignment), path(cross_mappability)
     each n1
 
     output:
-    path("${cross_mappability}/*/*.crossmap.txt")
+    path("crossmap.txt")
 
     script:
-    n_gene_per_crossmap_batch = N_GENE_PER_CROSSMAP_BATCH
-    n2 = n1 + n_gene_per_crossmap_batch - 1
+    n2 = n1 + N_GENE_PER_CROSSMAP_BATCH - 1
 
     """
-    compute_cross_mappability.R --annot $exon_utr_annot_fn --mappability $mappability_fn --kmer $ambiguous_kmer_dir --align $ambiguous_kmers_alignment --index genome --n1 $n1 --n2 $n2 --mismatch $MISMATCH --max_chr $MAX_CHR --max_gene $MAX_GENE_ALIGNMENT --initonly FALSE --dir_name_len $DIR_NAME_LEN --verbose 1 -o $cross_mappability 2>&1 | tee compute_cross_mappability_${n1}_${n2}_init.log
+    compute_cross_mappability.R --annot $exon_utr_annot_fn --mappability $mappability_fn --kmer $ambiguous_kmer_dir --align $ambiguous_kmers_alignment --index genome --n1 $n1 --n2 $n2 --mismatch $MISMATCH --max_chr $MAX_CHR --max_gene $MAX_GENE_ALIGNMENT --initonly FALSE --dir_name_len $DIR_NAME_LEN --verbose 1 -o $cross_mappability
+    cat *.crossmap.txt > crossmap.txt
+    """
+
+}
+
+process concat_cross_mappability {
+
+    publishDir "${params.results}/cross_mappability"
+
+    input:
+    path("*.crossmap.txt")
+
+    output:
+    path('crossmap.txt')
+
+    """
+    cat *.crossmap.txt > crossmap.txt
     """
 
 }
@@ -278,6 +290,6 @@ workflow {
     NUMBER_GENES = count_genes_in_gtf(GENE_ANNOT_FN)
     n1 = (1..NUMBER_GENES).step(N_GENE_PER_CROSSMAP_BATCH)
     
-    process_cross_mappability(preprocess_cross_mappability(gene_mappability, annot_txt, ambig_kmers_with_fasta, bowtie_index), n1)
+    process_cross_mappability(preprocess_cross_mappability(gene_mappability, annot_txt, ambig_kmers_with_fasta, bowtie_index), n1).toSortedList() | concat_cross_mappability
 
 }
