@@ -96,9 +96,32 @@ process make_bed {
 
 }
 
-process make_snp_mappability {
+
+process index_kmer_mappability {
 
     time '24h'
+    publishDir "${params.results}/kmer-mappability-tabixed"
+    container 'library://porchard/default/general:20220107'
+    memory '5 GB'
+
+    input:
+    tuple val(k), path(f)
+
+    output:
+    path("${f}.gz")
+    path("${f}.gz.tbi")
+
+    """
+    bgzip $f
+    tabix -p bed ${f}.gz
+    """
+
+}
+
+
+process make_snp_mappability {
+
+    time '72h'
     publishDir "${params.results}/snp-mappability"
     container 'library://porchard/default/general:20220107'
     memory '50 GB'
@@ -300,6 +323,7 @@ workflow {
     bowtie_index = make_bowtie_index(full_fasta)
 
     kmer_mappability = make_k_mappability(full_fasta, KS) | make_bed // k, bed
+    index_kmer_mappability(kmer_mappability)
     make_snp_mappability(kmer_mappability)
     exon_kmer_mappability_fn = kmer_mappability.filter({it -> it[0] == EXON_K}).map({it -> it[1]})
     utr_kmer_mappability_fn = kmer_mappability.filter({it -> it[0] == UTR_K}).map({it -> it[1]})
