@@ -4,6 +4,7 @@
 import pandas as pd
 import argparse
 import logging
+from collections import deque
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--k', type=int, required=True)
@@ -14,7 +15,6 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s: %(
 
 KMER_MAPPABILITY = args.kmer_mappability # '/net/topmed10/working/porchard/rnaseq/work/test-crossmap/work/60/ea9a1e7f64ba860c7616ddf035ddc4/out/mappability_75mer_2mismatch.bed'
 K = args.k
-SPAN = (K * 2) - 1
 
 
 class ChunkedFileReader:
@@ -67,8 +67,22 @@ with open(KMER_MAPPABILITY, 'r') as fh:
             for p in range(start, end):
                 pos.append(p)
                 value.append(score)
-        chr_series = pd.Series(value, index=pos)
-        pos_scores = chr_series.rolling(SPAN, min_periods=0, center=True, closed='both').mean()
-        for i, v in zip(pos_scores.index, pos_scores.values):
-            print(f'{chrom}\t{i}\t{i+1}\t{v}')
 
+        scores = deque()
+        for p, v in zip(pos, value):
+            kmer_start = p
+            kmer_end = p + K
+            if len(scores) == 0:
+                # first kmer, need to initiate everything
+                for variant in range(kmer_start, kmer_end):
+                    scores.append([variant, 0, 0]) # position, n, sum of values
+            else:
+                scores.append([kmer_end - 1, 0, 0])
+            for i in scores:
+                i[1] += 1
+                i[2] += v
+            # now pop off the first one, since this is the last kmer that should be applied to it
+            i = scores.popleft()
+            assert(i[0] == p)
+            mean_v = i[2] / i[1]
+            print(f'{chrom}\t{p}\t{p+1}\t{mean_v}')
